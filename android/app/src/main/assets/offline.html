@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+<title>DIY Board</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: #07080c; color: #f0efec;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; user-select: none; }
+  .glow { position: absolute; width: 680px; height: 680px; border-radius: 50%;
+    background: radial-gradient(closest-side, rgba(57,135,229,.25), rgba(57,135,229,0));
+    left: 50%; top: 50%; margin: -340px 0 0 -340px; }
+  .wrap { position: relative; height: 100%; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 18px; text-align: center; padding: 16px; }
+  .time { font-size: 120px; font-weight: 600; letter-spacing: -.03em; line-height: 1;
+    font-variant-numeric: tabular-nums; }
+  .date { font-size: 18px; color: #b9bcc8; }
+  .status { display: inline-flex; align-items: center; gap: 10px; margin-top: 14px; padding: 10px 18px;
+    border-radius: 999px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08);
+    font-size: 15px; color: #b9bcc8; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #fab219; position: relative; }
+  /* 1 Hz blink from JS: a looping CSS animation keeps this weak GPU at 60 fps all night */
+  .dot::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: #fab219;
+    transform: scale(2.4); opacity: .3; }
+  .dot.off::after { opacity: 0; }
+  .steps { display: flex; gap: 10px; margin-top: 8px; }
+  .step { width: 210px; padding: 12px 14px; border-radius: 14px; text-align: left;
+    background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.07);
+    font-size: 12.5px; color: #b9bcc8; line-height: 1.45; }
+  .step b { display: block; color: #f0efec; font-size: 13px; margin-bottom: 3px; }
+  code { font-family: ui-monospace, monospace; color: #9ec5f4; font-size: 12px; }
+</style>
+</head>
+<body>
+  <div class="glow"></div>
+  <div class="wrap">
+    <div class="time" id="t">--:--</div>
+    <div class="date" id="d"></div>
+    <div class="status"><span class="dot" id="dot"></span>Waiting for your laptop…</div>
+    <div class="steps">
+      <div class="step"><b>1 · Plug in</b>Connect the tablet with a USB data cable. USB debugging must be on.</div>
+      <div class="step"><b>2 · Start the server</b>On the laptop, in the diyboard folder: <code>npm start</code></div>
+      <div class="step"><b>3 · That's it</b>This screen switches to the dashboard on its own.</div>
+    </div>
+  </div>
+<script>
+  var DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function tick() {
+    var d = new Date();
+    document.getElementById('t').textContent = pad(d.getHours()) + ':' + pad(d.getMinutes());
+    document.getElementById('dot').className = 'dot' + (d.getSeconds() % 2 ? ' off' : '');
+    document.getElementById('d').textContent = DAYS[d.getDay()] + ', ' + d.getDate() + ' ' + MONTHS[d.getMonth()];
+    setTimeout(tick, 1000 - (d.getTime() % 1000) + 5);
+  }
+  tick();
+</script>
+</body>
+</html>

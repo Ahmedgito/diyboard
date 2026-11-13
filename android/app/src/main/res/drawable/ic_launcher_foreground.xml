@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 108dp adaptive canvas; the safe zone is the centre 66dp. Three rising bars + a live dot. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#3987E5" android:pathData="M36,58h8a2,2 0,0 1,2 2v14h-12v-14a2,2 0,0 1,2 -2z" />
+    <path android:fillColor="#6DA7EC" android:pathData="M50,46h8a2,2 0,0 1,2 2v26h-12v-26a2,2 0,0 1,2 -2z" />
+    <path android:fillColor="#9085E9" android:pathData="M64,36h8a2,2 0,0 1,2 2v36h-12v-36a2,2 0,0 1,2 -2z" />
+    <path android:fillColor="#3ECF5A" android:pathData="M40,40m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0" />
+</vector>
