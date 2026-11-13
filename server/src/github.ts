@@ -1,12 +1,12 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { GitHubStats, MergedPr, PullRequest, Toast } from '../../shared/types.ts';
+import type { GitHubStats, PrStatus, PullRequest, Toast } from '../../shared/types.ts';
 
 const run = promisify(execFile);
 
 const PR_FIELDS = `
   ... on PullRequest {
-    id title number url isDraft updatedAt additions deletions reviewDecision
+    id title number url isDraft updatedAt additions deletions reviewDecision state closedAt merged
     author { login }
     repository { nameWithOwner }
     comments { totalCount }
@@ -14,7 +14,7 @@ const PR_FIELDS = `
   }`;
 
 const QUERY = `
-query($mine: String!, $reviews: String!, $merged: String!) {
+query($open: String!, $closed: String!) {
   viewer {
     login name
     contributionsCollection {
@@ -24,32 +24,42 @@ query($mine: String!, $reviews: String!, $merged: String!) {
       }
     }
   }
-  mine: search(query: $mine, type: ISSUE, first: 12) { issueCount nodes { ${PR_FIELDS} } }
-  reviews: search(query: $reviews, type: ISSUE, first: 12) { issueCount nodes { ${PR_FIELDS} } }
-  merged: search(query: $merged, type: ISSUE, first: 12) {
-    issueCount
-    nodes { ... on PullRequest { id title number mergedAt additions deletions repository { nameWithOwner } } }
-  }
+  open: search(query: $open, type: ISSUE, first: 50) { nodes { ${PR_FIELDS} } }
+  closed: search(query: $closed, type: ISSUE, first: 30) { nodes { ${PR_FIELDS} } }
 }`;
+
+const CLOSED_WINDOW_MS = 24 * 3_600_000;
+const ORDER: Record<PrStatus, number> = { approved: 0, review: 1, merged: 2, closed: 2 };
 
 const HEATMAP_WEEKS = 18;
 
 export class GitHubCollector {
+  private readonly user: string | null;
   private token: string | null = null;
   private prev: GitHubStats | null = null;
   onToast: ((t: Omit<Toast, 'id' | 'at'>) => void) | null = null;
+
+  constructor(user: string | null = null) {
+    this.user = user;
+  }
 
   private async getToken(): Promise<string> {
     if (this.token) return this.token;
     const env = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
     if (env) return (this.token = env);
+    // `--user` reads that account's token without switching the active `gh` account.
+    const args = this.user ? ['auth', 'token', '--user', this.user] : ['auth', 'token'];
     try {
-      const { stdout } = await run('gh', ['auth', 'token'], { windowsHide: true });
+      const { stdout } = await run('gh', args, { windowsHide: true });
       const tok = stdout.trim();
       if (!tok) throw new Error('empty');
       return (this.token = tok);
     } catch {
-      throw new Error('No GitHub token. Run `gh auth login` or set GITHUB_TOKEN.');
+      throw new Error(
+        this.user
+          ? `No GitHub token for ${this.user}. Run \`gh auth login\` with that account.`
+          : 'No GitHub token. Run `gh auth login` or set GITHUB_TOKEN.',
+      );
     }
   }
 
@@ -85,15 +95,24 @@ export class GitHubCollector {
   }
 
   async poll(): Promise<GitHubStats> {
-    const since = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
+    const now = Date.now();
+    const since = new Date(now - CLOSED_WINDOW_MS).toISOString().replace(/\.\d+Z$/, 'Z');
     const [data, notifications] = await Promise.all([
       this.graphql(QUERY, {
-        mine: 'is:pr is:open author:@me archived:false sort:updated-desc',
-        reviews: 'is:pr is:open review-requested:@me archived:false sort:updated-desc',
-        merged: `is:pr author:@me is:merged merged:>=${since} sort:updated-desc`,
+        // `@me` is whichever account the token belongs to (see `githubUser` in the config)
+        open: 'is:pr is:open author:@me archived:false sort:updated-desc',
+        closed: `is:pr is:closed author:@me closed:>=${since} sort:updated-desc`,
       }),
       this.notifications(),
     ]);
+
+    // Drafts and "changes requested" are left out on purpose: the panel tracks approved / in review / closed.
+    const prs = [...data.open.nodes, ...data.closed.nodes]
+      .filter(Boolean)
+      .map(mapPr)
+      .filter((p): p is PullRequest => !!p && (!p.closedAt || now - Date.parse(p.closedAt) <= CLOSED_WINDOW_MS))
+      .sort((a, b) => ORDER[a.status] - ORDER[b.status] || Date.parse(b.closedAt ?? b.updatedAt) - Date.parse(a.closedAt ?? a.updatedAt));
+    const count = (...s: PrStatus[]) => prs.filter((p) => s.includes(p.status)).length;
 
     const cal = data.viewer.contributionsCollection.contributionCalendar;
     const allDays: { date: string; count: number }[] = cal.weeks.flatMap((w: any) =>
@@ -115,22 +134,10 @@ export class GitHubCollector {
       updatedAt: Date.now(),
       login: data.viewer.login,
       name: data.viewer.name,
-      openPrs: data.mine.nodes.filter(Boolean).map(mapPr),
-      openCount: data.mine.issueCount,
-      reviewRequests: data.reviews.nodes.filter(Boolean).map(mapPr),
-      reviewCount: data.reviews.issueCount,
-      merged: data.merged.nodes.filter(Boolean).map(
-        (n: any): MergedPr => ({
-          id: n.id,
-          title: n.title,
-          number: n.number,
-          repo: n.repository.nameWithOwner,
-          mergedAt: n.mergedAt,
-          additions: n.additions,
-          deletions: n.deletions,
-        }),
-      ),
-      mergedCount: data.merged.issueCount,
+      prs,
+      approvedCount: count('approved'),
+      reviewCount: count('review'),
+      closedCount: count('merged', 'closed'),
       notifications,
       contributions: {
         totalYear: cal.totalContributions,
@@ -149,27 +156,32 @@ export class GitHubCollector {
     const prev = this.prev;
     if (!prev || !this.onToast) return;
     const toast = this.onToast;
-    const prevReview = new Set(prev.reviewRequests.map((p) => p.id));
-    for (const pr of next.reviewRequests)
-      if (!prevReview.has(pr.id)) toast({ kind: 'review', title: `Review requested · ${pr.author}`, detail: `${shortRepo(pr.repo)}#${pr.number} ${pr.title}` });
-
-    const prevMerged = new Set(prev.merged.map((p) => p.id));
-    for (const pr of next.merged)
-      if (!prevMerged.has(pr.id)) toast({ kind: 'merged', title: 'PR merged', detail: `${shortRepo(pr.repo)}#${pr.number} ${pr.title}` });
-
-    const prevCi = new Map(prev.openPrs.map((p) => [p.id, p.ci]));
-    for (const pr of next.openPrs) {
-      const before = prevCi.get(pr.id);
-      if (before === undefined || before === pr.ci) continue;
-      if (pr.ci === 'FAILURE' || pr.ci === 'ERROR')
-        toast({ kind: 'ci-fail', title: 'Checks failed', detail: `${shortRepo(pr.repo)}#${pr.number} ${pr.title}` });
-      else if (pr.ci === 'SUCCESS')
-        toast({ kind: 'ci-pass', title: 'Checks passed', detail: `${shortRepo(pr.repo)}#${pr.number} ${pr.title}` });
+    const before = new Map(prev.prs.map((p) => [p.id, p]));
+    for (const pr of next.prs) {
+      const was = before.get(pr.id);
+      const detail = `${shortRepo(pr.repo)}#${pr.number} ${pr.title}`;
+      if (pr.status !== was?.status) {
+        if (pr.status === 'merged') toast({ kind: 'merged', title: 'PR merged', detail });
+        else if (pr.status === 'closed') toast({ kind: 'info', title: 'PR closed', detail });
+        else if (pr.status === 'approved' && was) toast({ kind: 'review', title: 'PR approved', detail });
+      }
+      if (pr.closedAt || !was || was.ci === pr.ci) continue;
+      if (pr.ci === 'FAILURE' || pr.ci === 'ERROR') toast({ kind: 'ci-fail', title: 'Checks failed', detail });
+      else if (pr.ci === 'SUCCESS') toast({ kind: 'ci-pass', title: 'Checks passed', detail });
     }
   }
 }
 
-function mapPr(n: any): PullRequest {
+/** Returns null for PRs outside the tracked states (drafts, changes requested). */
+function mapPr(n: any): PullRequest | null {
+  const status: PrStatus | null =
+    n.state === 'MERGED' || n.merged ? 'merged'
+    : n.state === 'CLOSED' ? 'closed'
+    : n.isDraft ? null
+    : n.reviewDecision === 'APPROVED' ? 'approved'
+    : n.reviewDecision === 'CHANGES_REQUESTED' ? null
+    : 'review'; // REVIEW_REQUIRED, or no review rule on the repo
+  if (!status) return null;
   return {
     id: n.id,
     title: n.title,
@@ -184,6 +196,8 @@ function mapPr(n: any): PullRequest {
     deletions: n.deletions,
     comments: n.comments.totalCount,
     updatedAt: n.updatedAt,
+    status,
+    closedAt: status === 'merged' || status === 'closed' ? (n.closedAt ?? null) : null,
   };
 }
 

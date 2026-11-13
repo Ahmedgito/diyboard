@@ -27,6 +27,16 @@ export function fmtDuration(ms: number): string {
   return `${Math.floor(h / 24)}d ${h % 24}h`;
 }
 
+export function fmtPct(n: number): string {
+  return `${Math.round(n)}%`;
+}
+
+/** Within a day: "in 3h 05m". Further out: "Thu 1:00 PM" (local time). */
+export function fmtReset(t: number, now: number): string {
+  if (t - now < 86_400_000) return `in ${fmtDuration(t - now)}`;
+  return new Date(t).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+}
+
 export function fmtAgo(t: number, now: number): string {
   const s = Math.max(0, Math.round((now - t) / 1000));
   if (s < 60) return 'just now';

@@ -14,6 +14,8 @@ export interface Config {
   claudeProjectsDir: string;
   githubEnabled: boolean;
   githubPollSeconds: number;
+  /** Which `gh` login to show when several are signed in (`gh auth status`). Defaults to the active one. */
+  githubUser: string | null;
 }
 
 const defaults: Config = {
@@ -24,6 +26,7 @@ const defaults: Config = {
   claudeProjectsDir: join(homedir(), '.claude', 'projects'),
   githubEnabled: true,
   githubPollSeconds: 90,
+  githubUser: null,
 };
 
 export function loadConfig(): Config {

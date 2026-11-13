@@ -15,6 +15,22 @@ export interface ClaudeBlock {
   calls: number;
 }
 
+export interface PlanLimit {
+  kind: 'session' | 'weekly';
+  label: string; // "5-hour session", "Weekly · all models", "Weekly · Fable"
+  percent: number; // 0-100
+  resetsAt: number | null; // epoch ms; null when no window is open
+  severity: 'normal' | 'warning' | 'critical';
+}
+
+/** Claude subscription limits, as shown by `/usage` in Claude Code. */
+export interface PlanUsage {
+  plan: string | null; // "Max 5x", "Pro"
+  limits: PlanLimit[];
+  fetchedAt: number;
+  stale: boolean; // last fetch failed (e.g. token expired); showing the previous reading
+}
+
 export interface ClaudeStats {
   available: boolean;
   error?: string;
@@ -45,10 +61,16 @@ export interface ClaudeStats {
   streakDays: number;
   streakCapped: boolean; // streak reaches the edge of the scanned history
   last30Cost: number;
+  last30Tokens: number;
+  /** Subscription limits; null for API-key users, where the dashboard shows API-equivalent cost instead. */
+  plan: PlanUsage | null;
 }
 
 export type CiState = 'SUCCESS' | 'FAILURE' | 'ERROR' | 'PENDING' | 'EXPECTED' | null;
 export type ReviewState = 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
+
+/** approved/review: open PRs. merged/closed: closed in the last 24 hours. */
+export type PrStatus = 'approved' | 'review' | 'merged' | 'closed';
 
 export interface PullRequest {
   id: string;
@@ -64,16 +86,8 @@ export interface PullRequest {
   deletions: number;
   comments: number;
   updatedAt: string;
-}
-
-export interface MergedPr {
-  id: string;
-  title: string;
-  number: number;
-  repo: string;
-  mergedAt: string;
-  additions: number;
-  deletions: number;
+  status: PrStatus;
+  closedAt: string | null;
 }
 
 export interface GitHubStats {
@@ -82,12 +96,11 @@ export interface GitHubStats {
   updatedAt: number;
   login: string;
   name: string | null;
-  openPrs: PullRequest[];
-  openCount: number;
-  reviewRequests: PullRequest[];
-  reviewCount: number;
-  merged: MergedPr[]; // last 7 days
-  mergedCount: number;
+  /** PRs authored by `login`: approved, then awaiting review, then closed/merged in the last 24h. */
+  prs: PullRequest[];
+  approvedCount: number;
+  reviewCount: number; // open, non-draft, no decision yet
+  closedCount: number; // closed or merged in the last 24h
   notifications: number | null;
   contributions: {
     totalYear: number;

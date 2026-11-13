@@ -312,6 +312,10 @@ button {
   margin: 8px 0 12px -4px;
   cursor: pointer;
 }
+.clock-time.clock-compact {
+  font-size: 78px;
+  margin-top: 22px; /* keep the card's height the same as at 92px */
+}
 .roll {
   display: inline-block;
   height: 1em;
@@ -567,6 +571,7 @@ button {
 }
 .hero-caption {
   margin-top: 5px;
+  white-space: nowrap;
   font-size: 11px;
   color: var(--text-muted);
 }
@@ -577,6 +582,7 @@ button {
   gap: 3px;
   font-size: 12px;
   padding-bottom: 2px;
+  white-space: nowrap;
 }
 
 .now-line {
@@ -644,6 +650,37 @@ button {
     transform: scale(0.7);
     opacity: 0.7;
   }
+}
+
+.limits {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.limit .row-between {
+  margin-bottom: 3px;
+}
+.limit-track {
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+.limit-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--series-1), var(--series-7));
+  transform-origin: left;
+  transition: transform 900ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.limit-fill.sev-warning {
+  background: var(--warning);
+}
+.limit-fill.sev-critical {
+  background: var(--critical);
+}
+.hero-caption .stale {
+  color: var(--warning);
 }
 
 .chart-block .row-between {
@@ -818,6 +855,10 @@ button {
 .tile-hot {
   background: rgba(250, 178, 25, 0.12);
 }
+.tile-good .tile-icon,
+.tile-good .tile-num {
+  color: var(--good-text);
+}
 .tile-hot .tile-icon,
 .tile-hot .tile-num {
   color: var(--warning);
@@ -846,8 +887,8 @@ button {
 .pr-row:nth-child(odd) {
   background: rgba(255, 255, 255, 0.025);
 }
-.pr-review {
-  box-shadow: inset 2px 0 0 var(--warning);
+.pr-done {
+  opacity: 0.62;
 }
 @keyframes row-in {
   from {
@@ -898,6 +939,9 @@ button {
 .ci-none {
   color: var(--text-muted);
 }
+.ci-merged {
+  color: var(--series-7);
+}
 .badge {
   font-size: 10px;
   padding: 2px 6px;
@@ -912,6 +956,10 @@ button {
 .badge-bad {
   color: var(--critical-text);
   background: rgba(208, 59, 59, 0.16);
+}
+.badge-merged {
+  color: var(--series-7);
+  background: rgba(144, 133, 233, 0.16);
 }
 .badge-warn {
   color: var(--warning);

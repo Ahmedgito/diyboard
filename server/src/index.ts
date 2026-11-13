@@ -1,11 +1,12 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import os from 'node:os';
-import { extname, join, normalize } from 'node:path';
+import { dirname, extname, join, normalize } from 'node:path';
 import type { ClaudeStats, GitHubStats, SystemStats, Toast } from '../../shared/types.ts';
 import { AdbWatcher } from './adb.ts';
 import { ClaudeCollector } from './claude.ts';
 import { loadConfig, ROOT } from './config.ts';
+import { PlanCollector } from './plan.ts';
 import { GitHubCollector } from './github.ts';
 import { SystemCollector } from './system.ts';
 
@@ -40,7 +41,8 @@ function toast(t: Omit<Toast, 'id' | 'at'>) {
 // ---------------------------------------------------------------- collectors
 const system = new SystemCollector();
 const claude = new ClaudeCollector(config.claudeProjectsDir);
-const github = new GitHubCollector();
+const plan = new PlanCollector(dirname(config.claudeProjectsDir));
+const github = new GitHubCollector(config.githubUser);
 github.onToast = toast;
 claude.onNewSession = (project) => toast({ kind: 'claude', title: 'New Claude Code session', detail: project });
 
@@ -83,6 +85,8 @@ const emptyClaude = (error: string): ClaudeStats => ({
   streakDays: 0,
   streakCapped: false,
   last30Cost: 0,
+  last30Tokens: 0,
+  plan: null,
 });
 
 let claudeBusy = false;
@@ -91,11 +95,11 @@ async function claudeLoop() {
   if (claudeBusy) return;
   claudeBusy = true;
   try {
-    const changed = await claude.scan();
+    const [changed, planChanged] = await Promise.all([claude.scan(), plan.poll()]);
     const now = Date.now();
     // Push on new data, and at least every 20s so time windows (active, 5h block) roll over.
-    if (changed || now - lastClaudePush > 20_000) {
-      publish('claude', claude.snapshot(now));
+    if (changed || planChanged || now - lastClaudePush > 20_000) {
+      publish('claude', { ...claude.snapshot(now), plan: plan.usage });
       lastClaudePush = now;
     }
   } catch (err) {

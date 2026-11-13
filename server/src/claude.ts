@@ -205,6 +205,7 @@ export class ClaudeCollector {
     const activeDays = new Set<string>();
     const recentSessions = new Set<string>();
     let last30Cost = 0;
+    let last30Tokens = 0;
 
     // 5-hour usage blocks (same idea as the Claude subscription windows)
     let block: ClaudeBlock | null = null;
@@ -218,7 +219,10 @@ export class ClaudeCollector {
       d.cost += e.cost;
       d.tokens += e.tokens;
       dailyMap.set(dayKey, d);
-      if (e.t >= now - 30 * DAY) last30Cost += e.cost;
+      if (e.t >= now - 30 * DAY) {
+        last30Cost += e.cost;
+        last30Tokens += e.tokens;
+      }
 
       if (!block || e.t >= block.end || e.t - lastT >= BLOCK_MS) {
         const start = Math.floor(e.t / HOUR) * HOUR;
@@ -293,6 +297,8 @@ export class ClaudeCollector {
       streakDays: streak,
       streakCapped: streak >= HISTORY_DAYS - 1,
       last30Cost,
+      last30Tokens,
+      plan: null,
     };
   }
 }

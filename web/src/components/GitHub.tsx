@@ -1,6 +1,6 @@
 import type { CiState, GitHubStats, PullRequest } from '../../../shared/types.ts';
-import { shortRepo } from '../format.ts';
-import { IconBell, IconCheck, IconDash, IconDot, IconEye, IconGitHub, IconMerge, IconPr, IconX } from './icons.tsx';
+import { fmtAgo, shortRepo } from '../format.ts';
+import { IconBell, IconCheck, IconDash, IconDot, IconEye, IconGitHub, IconMerge, IconX } from './icons.tsx';
 import { AnimatedNumber, Card, CardHeader } from './ui.tsx';
 
 function CiIcon({ ci }: { ci: CiState }) {
@@ -10,13 +10,18 @@ function CiIcon({ ci }: { ci: CiState }) {
   return <IconDash className="ci ci-none" aria-label="no checks" />;
 }
 
-function ReviewBadge({ pr }: { pr: PullRequest }) {
-  if (pr.isDraft) return <span className="badge">Draft</span>;
-  if (pr.review === 'APPROVED') return <span className="badge badge-good">Approved</span>;
-  if (pr.review === 'CHANGES_REQUESTED') return <span className="badge badge-bad">Changes</span>;
-  if (pr.review === 'REVIEW_REQUIRED') return <span className="badge badge-warn">Review</span>;
-  return null;
+function StatusIcon({ pr }: { pr: PullRequest }) {
+  if (pr.status === 'merged') return <IconMerge className="ci ci-merged" aria-label="merged" />;
+  if (pr.status === 'closed') return <IconX className="ci ci-none" aria-label="closed" />;
+  return <CiIcon ci={pr.ci} />;
 }
+
+const BADGE: Record<PullRequest['status'], [string, string]> = {
+  approved: ['Approved', 'badge-good'],
+  review: ['Review', 'badge-warn'],
+  merged: ['Merged', 'badge-merged'],
+  closed: ['Closed', ''],
+};
 
 const HEAT = ['var(--heat-0)', 'var(--heat-1)', 'var(--heat-2)', 'var(--heat-3)', 'var(--heat-4)'];
 
@@ -45,8 +50,8 @@ export function GitHubPanel({ stats }: { stats: GitHubStats | null }) {
   const d0 = new Date();
   const todayKey = `${d0.getFullYear()}-${String(d0.getMonth() + 1).padStart(2, '0')}-${String(d0.getDate()).padStart(2, '0')}`;
   const max = Math.max(...stats.contributions.days.map((d) => d.count));
-  // A review queue is the more urgent list; show it first when it has items.
-  const list = [...stats.reviewRequests.map((pr) => ({ pr, mine: false })), ...stats.openPrs.map((pr) => ({ pr, mine: true }))].slice(0, 6);
+  const list = stats.prs.slice(0, 6); // server orders them approved → review → closed
+  const now = Date.now();
 
   return (
     <Card className="gh-card" delay={180}>
@@ -67,47 +72,50 @@ export function GitHubPanel({ stats }: { stats: GitHubStats | null }) {
       />
 
       <div className="gh-tiles">
-        <div className="tile">
-          <IconPr className="tile-icon" />
+        <div className={`tile ${stats.approvedCount ? 'tile-good' : ''}`}>
+          <IconCheck className="tile-icon" />
           <span className="tile-num">
-            <AnimatedNumber value={stats.openCount} format={(n) => String(Math.round(n))} />
+            <AnimatedNumber value={stats.approvedCount} format={(n) => String(Math.round(n))} />
           </span>
-          <span className="tile-label">open PRs</span>
+          <span className="tile-label">approved</span>
         </div>
         <div className={`tile ${stats.reviewCount ? 'tile-hot' : ''}`}>
           <IconEye className="tile-icon" />
           <span className="tile-num">
             <AnimatedNumber value={stats.reviewCount} format={(n) => String(Math.round(n))} />
           </span>
-          <span className="tile-label">to review</span>
+          <span className="tile-label">in review</span>
         </div>
         <div className="tile">
           <IconMerge className="tile-icon" />
           <span className="tile-num">
-            <AnimatedNumber value={stats.mergedCount} format={(n) => String(Math.round(n))} />
+            <AnimatedNumber value={stats.closedCount} format={(n) => String(Math.round(n))} />
           </span>
-          <span className="tile-label">merged 7d</span>
+          <span className="tile-label">closed 24h</span>
         </div>
       </div>
 
       <div className="pr-list">
-        {list.length === 0 && <div className="muted small pr-empty">Inbox zero. No open PRs 🎉</div>}
-        {list.map(({ pr, mine }, i) => (
-          <div key={pr.id} className={`pr-row ${mine ? '' : 'pr-review'}`} style={{ animationDelay: `${400 + i * 70}ms` }}>
-            <CiIcon ci={pr.ci} />
+        {list.length === 0 && <div className="muted small pr-empty">No PRs approved, in review or closed today</div>}
+        {list.map((pr, i) => (
+          <div key={pr.id} className={`pr-row ${pr.closedAt ? 'pr-done' : ''}`} style={{ animationDelay: `${400 + i * 70}ms` }}>
+            <StatusIcon pr={pr} />
             <div className="pr-main">
               <div className="pr-title">{pr.title}</div>
               <div className="pr-meta small">
                 <span className="mono">
                   {shortRepo(pr.repo)}#{pr.number}
                 </span>
-                {!mine && <span className="muted">by {pr.author}</span>}
-                <span className="diff">
-                  <span className="add">+{pr.additions}</span> <span className="del">−{pr.deletions}</span>
-                </span>
+                {pr.closedAt ? (
+                  <span className="muted">{fmtAgo(Date.parse(pr.closedAt), now)}</span>
+                ) : (
+                  <span className="diff">
+                    <span className="add">+{pr.additions}</span> <span className="del">−{pr.deletions}</span>
+                  </span>
+                )}
               </div>
             </div>
-            <ReviewBadge pr={pr} />
+            <span className={`badge ${BADGE[pr.status][1]}`}>{BADGE[pr.status][0]}</span>
           </div>
         ))}
       </div>

@@ -28,8 +28,8 @@ Clock · Claude Code usage · GitHub pull requests · laptop vitals · focus tim
 | 🕐 | **Clock** | Rolling-digit time, a 60-tick seconds strip, date, ISO week and day progress. Tap to switch 12h/24h. |
 | 💻 | **Laptop** | CPU over the last 2 minutes, memory, disk, laptop and tablet battery, uptime, USB link status. |
 | 🎯 | **Focus** | Tap-to-start 25-minute deep-work timer, followed by a 5-minute break. Counts sessions per day. |
-| ✳️ | **Claude Code** | API-equivalent spend today, tokens, calls, sessions, live "working" status with project and branch, the current 5-hour usage window, output tokens per hour, model mix, 14-day spend, top projects and day streak. |
-| 🐙 | **GitHub** | Open PRs with CI ✓/✕/● and review state, PRs waiting for your review, PRs merged in the last 7 days, unread notifications, contribution heatmap and streak. |
+| ✳️ | **Claude Code** | Subscription limits (5-hour session % and weekly %, with reset times; falls back to API-equivalent spend for API-key users), tokens, calls, sessions, live "working" status with project and branch, output tokens per hour, model mix, 14-day usage, top projects and day streak. |
+| 🐙 | **GitHub** | Your own PRs: approved, in review (with CI ✓/✕/●), and closed or merged in the last 24 hours; unread notifications, contribution heatmap and streak. |
 | 🔔 | **Toasts** | New review request, PR merged, CI went red or green, new Claude session, tablet connected. |
 
 Between 23:00 and 06:00 the board dims itself, and the tablet backlight too.
@@ -103,11 +103,14 @@ Everything works with defaults. To change something, create `diyboard.config.jso
   "autoLaunch": true,        // open the app on the tablet when it's plugged in
   "githubEnabled": true,
   "githubPollSeconds": 90,
+  "githubUser": "octodev",   // which `gh` login to show if you have several (default: the active one)
   "claudeProjectsDir": "C:/Users/me/.claude/projects"
 }
 ```
 
 > 💡 The Claude cost is the **API list-price equivalent** of the tokens you used (see [`server/src/pricing.ts`](server/src/pricing.ts)).
+>
+> On a Pro/Max subscription the panel shows plan limits instead of dollars: the same numbers as `/usage` in Claude Code, read with the login Claude Code saves in `~/.claude/.credentials.json` (polled once a minute, never modified; see [`server/src/plan.ts`](server/src/plan.ts)). On macOS that login lives in the Keychain, so the panel falls back to dollars there.
 > On a Claude subscription you aren't billed this; it's a measure of how much work went through.
 
 ## 🪫 Built for a slow tablet

@@ -6,9 +6,9 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 
 function load24h(): boolean {
   try {
-    return localStorage.getItem('clock24') !== '0';
+    return localStorage.getItem('clock24') === '1'; // 12-hour unless switched by tapping the clock
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -56,8 +56,9 @@ export function Clock({ now, name }: { now: number; name: string | null }) {
         {greeting(hours)}
         {name ? <span className="clock-name">, {name}</span> : null}
       </div>
-      <button className="clock-time" onClick={toggle} aria-label="Toggle 12/24 hour clock">
-        <RollingDigit digit={Number(hh[0])} />
+      {/* 10–12 o'clock in 12-hour mode adds a digit beside AM/PM; shrink so it stays inside the card */}
+      <button className={`clock-time ${!h24 && shownH >= 10 ? 'clock-compact' : ''}`} onClick={toggle} aria-label="Toggle 12/24 hour clock">
+        {(h24 || shownH >= 10) && <RollingDigit digit={Number(hh[0])} />}
         <RollingDigit digit={Number(hh[1])} />
         <span className={`clock-colon ${sec % 2 ? 'dim' : ''}`}>:</span>
         <RollingDigit digit={Number(mm[0])} />

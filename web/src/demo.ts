@@ -60,6 +60,17 @@ export function demoClaude(now: number): ClaudeStats {
     streakDays: 23,
     streakCapped: false,
     last30Cost: 842.5,
+    last30Tokens: 2.31e9,
+    plan: {
+      plan: 'Max 5x',
+      fetchedAt: now,
+      stale: false,
+      limits: [
+        { kind: 'session', label: '5-hour session', percent: 46, resetsAt: blockStart + 5 * HOUR, severity: 'normal' },
+        { kind: 'weekly', label: 'Weekly · all models', percent: 63, resetsAt: todayStart + 4 * DAY + 8 * HOUR, severity: 'normal' },
+        { kind: 'weekly', label: 'Weekly · Opus', percent: 81, resetsAt: todayStart + 4 * DAY + 8 * HOUR, severity: 'warning' },
+      ],
+    },
   };
 }
 
@@ -70,6 +81,8 @@ const pr = (p: Partial<PullRequest> & Pick<PullRequest, 'title' | 'number' | 're
   isDraft: false,
   ci: 'SUCCESS',
   review: 'REVIEW_REQUIRED',
+  status: 'review',
+  closedAt: null,
   additions: 0,
   deletions: 0,
   comments: 0,
@@ -94,20 +107,17 @@ export function demoGitHub(now: number): GitHubStats {
     updatedAt: now,
     login: 'octodev',
     name: 'Ahmed',
-    reviewRequests: [
-      pr({ title: 'Retry webhook deliveries with exponential backoff', number: 482, repo: 'acme/payments-api', author: 'sara-k', ci: 'PENDING', additions: 214, deletions: 37 }),
-    ],
-    reviewCount: 2,
-    openPrs: [
-      pr({ title: 'Add idempotency keys to charge endpoint', number: 479, repo: 'acme/payments-api', review: 'APPROVED', additions: 386, deletions: 41 }),
+    prs: [
+      pr({ title: 'Add idempotency keys to charge endpoint', number: 479, repo: 'acme/payments-api', review: 'APPROVED', status: 'approved', additions: 386, deletions: 41 }),
       pr({ title: 'Migrate CI to reusable workflows', number: 133, repo: 'acme/infra', ci: 'FAILURE', additions: 92, deletions: 140 }),
-      pr({ title: 'feat: dark mode for the settings page', number: 57, repo: 'octodev/dotfiles-ui', review: 'CHANGES_REQUESTED', additions: 512, deletions: 88 }),
-      pr({ title: 'Bump eslint to v10 and fix new lint rules', number: 21, repo: 'octodev/diyboard', ci: 'PENDING', review: null, additions: 64, deletions: 59 }),
-      pr({ title: 'WIP: streaming exporter for usage reports', number: 488, repo: 'acme/payments-api', isDraft: true, ci: null, additions: 1204, deletions: 12 }),
+      pr({ title: 'Retry webhook deliveries with exponential backoff', number: 482, repo: 'acme/payments-api', ci: 'PENDING', additions: 214, deletions: 37 }),
+      pr({ title: 'Bump eslint to v10 and fix new lint rules', number: 21, repo: 'octodev/diyboard', review: null, additions: 64, deletions: 59 }),
+      pr({ title: 'feat: dark mode for the settings page', number: 57, repo: 'octodev/dotfiles-ui', status: 'merged', closedAt: new Date(now - 3 * HOUR).toISOString(), additions: 512, deletions: 88 }),
+      pr({ title: 'Spike: gRPC transport for exporter', number: 488, repo: 'acme/payments-api', status: 'closed', closedAt: new Date(now - 9 * HOUR).toISOString(), ci: null, additions: 1204, deletions: 12 }),
     ],
-    openCount: 6,
-    merged: [],
-    mergedCount: 9,
+    approvedCount: 1,
+    reviewCount: 3,
+    closedCount: 2,
     notifications: 4,
     contributions: { totalYear: 1286, today: days.find((d) => d.date === localKey(now))?.count ?? 0, streak: 23, days },
   };
