@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Aurora } from './components/Aurora.tsx';
 import { ClaudePanel } from './components/Claude.tsx';
 import { Clock } from './components/Clock.tsx';
@@ -40,21 +40,68 @@ function isNight(now: number) {
   return h >= 23 || h < 6;
 }
 
+/** How long the board stays at full brightness at night after the app opens, a tap, a reconnect or a toast. */
+const WAKE_MS = 10 * 60_000;
+const NIGHT_BACKLIGHT = 0.12;
+
+/**
+ * Night dimming that only kicks in when nobody is looking: the board is bright when it opens and
+ * after any interaction, and dims after WAKE_MS of idle between 23:00 and 06:00.
+ * The tap that wakes a dimmed board is swallowed so it doesn't also start the focus timer.
+ */
+function useNightDim(now: number, connected: boolean, toastCount: number) {
+  const [awakeUntil, setAwakeUntil] = useState(() => Date.now() + WAKE_MS);
+  const wake = () => setAwakeUntil(Date.now() + WAKE_MS);
+  const dim = isNight(now) && Date.now() > awakeUntil;
+  const dimRef = useRef(dim);
+  dimRef.current = dim;
+
+  useEffect(() => {
+    let swallow = false;
+    const onDown = () => {
+      swallow = dimRef.current;
+      setAwakeUntil(Date.now() + WAKE_MS);
+    };
+    const onClick = (e: Event) => {
+      if (!swallow) return;
+      swallow = false;
+      e.stopPropagation();
+      e.preventDefault();
+    };
+    window.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('click', onClick, true);
+    return () => {
+      window.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('click', onClick, true);
+    };
+  }, []);
+
+  // Plugging the tablet back in, or a new notification, should be readable.
+  useEffect(() => {
+    if (connected) wake();
+  }, [connected]);
+  useEffect(() => {
+    if (toastCount > 0) wake();
+  }, [toastCount]);
+
+  // Dim the actual backlight (tablet only), not just the pixels.
+  useEffect(() => {
+    native?.setBrightness(dim ? NIGHT_BACKLIGHT : -1);
+  }, [dim]);
+
+  return dim;
+}
+
 export function App() {
   const { state, toasts } = useDashboard();
   const now = useNow(1000, state.clockOffset);
   const scale = useStageScale();
   const [dx, dy] = pixelShift(now);
   const firstName = state.github?.name?.split(' ')[0] ?? null;
-  const night = isNight(now);
-
-  // Dim the actual backlight at night (tablet only), not just the pixels.
-  useEffect(() => {
-    native?.setBrightness(night ? 0.03 : -1);
-  }, [night]);
+  const dim = useNightDim(now, state.connected, toasts.length);
 
   return (
-    <div className={`viewport ${night ? 'night' : ''}`}>
+    <div className={`viewport ${dim ? 'night' : ''}`}>
       <Aurora now={now} />
       <div className="grain" aria-hidden />
       <main

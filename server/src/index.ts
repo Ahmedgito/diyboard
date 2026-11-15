@@ -114,7 +114,9 @@ async function githubLoop() {
   try {
     publish('github', await github.poll());
   } catch (err) {
-    const msg = (err as Error).message;
+    // Node's fetch reports every network error as "fetch failed"; the real reason is on `cause`.
+    const cause = (err as { cause?: { code?: string; message?: string } }).cause;
+    const msg = (err as Error).message + (cause ? ` (${cause.code ?? cause.message})` : '');
     console.warn(`[github] ${msg}`);
     const prev = latest.github as GitHubStats | undefined;
     publish('github', prev ? { ...prev, error: msg } : { available: false, error: msg, updatedAt: Date.now() });

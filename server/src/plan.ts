@@ -13,14 +13,18 @@ import type { PlanLimit, PlanUsage } from '../../shared/types.ts';
  */
 
 const ENDPOINT = 'https://api.anthropic.com/api/oauth/usage';
-const POLL_MS = 60_000;
-const BACKOFF_MS = 5 * 60_000;
+// Percentages move slowly and the endpoint rate-limits eagerly (it shares a budget with Claude Code's
+// own `/usage`), so poll gently and back off hard on 429.
+const POLL_MS = 3 * 60_000;
+const BACKOFF_MIN_MS = 5 * 60_000;
+const BACKOFF_MAX_MS = 60 * 60_000;
 
 export class PlanCollector {
   private readonly credentialsFile: string;
   private last: PlanUsage | null = null;
   private nextAt = 0;
   private busy = false;
+  private backoffMs = 0;
   /** Set once we know there is no subscription login on this machine (API-key users). */
   private unsupported = false;
 
@@ -32,7 +36,7 @@ export class PlanCollector {
     return this.last;
   }
 
-  /** Returns true when the reading changed. Cheap to call often; it only hits the network once a minute. */
+  /** Returns true when the reading changed. Cheap to call often; it only hits the network every few minutes. */
   async poll(now = Date.now()): Promise<boolean> {
     if (this.unsupported || this.busy || now < this.nextAt) return false;
     this.busy = true;
@@ -53,11 +57,18 @@ export class PlanCollector {
         },
         signal: AbortSignal.timeout(10_000),
       });
-      if (res.status === 429) this.nextAt = now + BACKOFF_MS;
+      if (res.status === 429) {
+        const retryAfter = Number(res.headers.get('retry-after')) * 1000;
+        this.backoffMs = Math.min(BACKOFF_MAX_MS, Math.max(BACKOFF_MIN_MS, this.backoffMs * 2, retryAfter || 0));
+        this.nextAt = now + this.backoffMs;
+        console.warn(`[plan] rate limited; next try in ${Math.round(this.backoffMs / 60_000)} min`);
+        return this.markStale();
+      }
       if (!res.ok) {
         console.warn(`[plan] usage request failed: HTTP ${res.status}`);
         return this.markStale();
       }
+      this.backoffMs = 0;
       const limits = parseLimits(await res.json());
       if (!limits.length) return this.markStale();
       const prev = JSON.stringify(this.last?.limits);
